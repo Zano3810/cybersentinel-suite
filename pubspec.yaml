@@ -1,5 +1,5 @@
 name: cybersentinel_suite
-description: CyberSentinel Suite - 5 Tab - com.cybersentinel.app - Full
+description: CyberSentinel Suite - 5 Tab - com.cybersentinel.app
 publish_to: 'none'
 version: 1.0.0+1
 environment:
@@ -15,7 +15,6 @@ dependencies:
   http: ^1.1.2
   connectivity_plus: ^5.0.2
   network_info_plus: ^5.0.2
-  flutter_blue_plus: ^1.31.15
   nfc_manager: ^3.3.0
   sensors_plus: ^5.0.1
   battery_plus: ^5.0.2

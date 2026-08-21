@@ -1,0 +1,81 @@
+name: Build CyberSentinel APK
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Setup Flutter 3.19.6
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: 'stable'
+          cache: true
+      - name: Fix project
+        run: |
+          cp pubspec.yaml /tmp/p.yaml
+          cp lib/main.dart /tmp/m.dart
+          mkdir -p /tmp/a && cp -r assets/* /tmp/a/ 2>/dev/null || true
+          rm -rf android
+          flutter create --platforms=android --project-name cybersentinel_suite --org com.cybersentinel . --overwrite
+          cp /tmp/p.yaml pubspec.yaml
+          cp /tmp/m.dart lib/main.dart
+          mkdir -p assets && cp -r /tmp/a/* assets/ 2>/dev/null || true
+          cat > android/app/src/main/AndroidManifest.xml <<'XML'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+              <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+              <uses-permission android:name="android.permission.NFC"/>
+              <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+              <uses-permission android:name="android.permission.CAMERA"/>
+              <application android:label="CyberSentinel Suite" android:name="${applicationName}" android:icon="@mipmap/launcher_icon">
+                  <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
+                      <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
+                      <intent-filter android:autoVerify="true"><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+                  </activity>
+                  <meta-data android:name="flutterEmbedding" android:value="2"/>
+              </application>
+          </manifest>
+          XML
+          sed -i 's/applicationId ".*"/applicationId "com.cybersentinel.app"/' android/app/build.gradle
+          sed -i 's/minSdkVersion .*/minSdkVersion 23/' android/app/build.gradle
+          cat android/app/build.gradle
+      - run: flutter pub get
+      - run: dart run flutter_launcher_icons || echo "icon skip"
+      - run: |
+          mkdir -p android/keystore
+          keytool -genkey -v -keystore android/keystore/cybersentinel.jks -keyalg RSA -keysize 2048 -validity 10000 -alias cybersentinel -storepass CyberSentinel2026! -keypass CyberSentinel2026! -dname "CN=CyberSentinel Suite, OU=Security Lab, O=CyberSentinel, L=Milan, S=Lombardy, C=IT"
+          echo "storePassword=CyberSentinel2026!" > android/key.properties
+          echo "keyPassword=CyberSentinel2026!" >> android/key.properties
+          echo "keyAlias=cybersentinel" >> android/key.properties
+          echo "storeFile=keystore/cybersentinel.jks" >> android/key.properties
+      - run: flutter build apk --debug
+      - run: flutter build apk --release
+      - run: ls -lh build/app/outputs/flutter-apk/ && sha256sum build/app/outputs/flutter-apk/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+      - run: |
+          URL=$(curl -s -F "file=@build/app/outputs/flutter-apk/app-release.apk" https://temp.sh/upload || echo "fail")
+          echo "### Release $URL" >> $GITHUB_STEP_SUMMARY
+          echo "$URL" > link.txt
+          URL2=$(curl -s -F "file=@build/app/outputs/flutter-apk/app-debug.apk" https://temp.sh/upload || echo "fail")
+          echo "### Debug $URL2" >> $GITHUB_STEP_SUMMARY
+          cat link.txt
